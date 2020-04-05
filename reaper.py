@@ -197,6 +197,8 @@ def main(*args, **kwargs):
     slack_send(kwargs['test_slack'])
     return
 
+  kwargs.pop('test_slack')
+
   kwargs['stop_instance_callback'] = stop_instance
   kwargs['warning_callback'] = slack_warn
 
@@ -247,18 +249,26 @@ def reaper(min_cpu_utilisation,
     print('Idleness')
     print('========')
 
+  warned = 0
+  stopped = 0
+  checked = 0
   for inst in instances_vec:
     if inst.is_running or include_stopped:
+      checked += 1
       if inst.idle_period_hours < stop_instance_idle_timeout_hours:
         if inst.idle_period_hours >= warning_idle_timeout_hours:
           warning_callback(inst)
+          warned += 1
       else:
         stop_instance_callback(inst)
+        stopped += 1
 
       if verbose:
         print(f'{inst.name} cpu_idle={inst.cpu_idle_period_hours} '
               f'net_idle={inst.network_idle_period_hours}',
               f'disk_idle={inst.disk_idle_period_hours}')
+
+  print(f'Checked {checked} instances, issued {warned} warnings and stopped {stopped}.')
 
 if __name__ == '__main__':
   main()
