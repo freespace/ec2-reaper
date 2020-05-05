@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import re
 import os
 import json
 from datetime import datetime, timedelta
@@ -19,6 +20,8 @@ REPORTING_LOOKBACK_TIME_HOURS = 48
 
 SLACK_WEB_HOOK_ENV_VAR = 'SLACK_WEB_HOOK'
 SLACK_CHANNEL_ENV_VAR = 'SLACK_CHANNEL'
+
+INSTANCE_TYPE_REGEX = re.compile('.large')
 
 def slack_send(msg):
   webhook = os.environ.get(SLACK_WEB_HOOK_ENV_VAR)
@@ -43,6 +46,9 @@ def slack_warn(inst):
   slack_send(msg)
 
 def stop_instance(inst):
+  msg = f':warning: Instance {inst.name} ({inst.InstanceId}) has been idle for {inst.idle_period_hours:.2f} hours '
+  f'and would be stopped if Steve implemented automatically termination. He has not.'
+  slack_send(msg)
   print(f'Stopping instance {inst}')
 
 class Instance(dict):
@@ -176,7 +182,7 @@ class Instance(dict):
 @click.option('-d', '--min-disk-ops', type=float, default=1,
               help='Minimum disk operations (read or write) per 5 minutes for an '
                    'instance to be considered active')
-@click.option('-n', '--min-network-packets', type=int, default=50,
+@click.option('-n', '--min-network-packets', type=int, default=100,
               help='Minimum (in or out) network packets per 5 minutes for '
                    'an instance to be considered active')
 @click.option('-s', '--stop_instance-idle-timeout-hours', type=int, default=6,
@@ -189,6 +195,8 @@ class Instance(dict):
 @click.option('--include-stopped', is_flag=True,
               help='Include stopped instances in idleness checks. For debugging '
                    'mostly')
+@click.option('--dry-run', is_flag=True,
+              help='If given then no action will be take and no messages will be sent')
 @click.option('--test-slack', type=str, default=None,
               help='When given a test message is sent into slack. Intended for '
                    'verifying slack integration. No other action will be taken')
@@ -210,6 +218,7 @@ def reaper(min_cpu_utilisation,
            stop_instance_idle_timeout_hours,
            warning_idle_timeout_hours,
            verbose,
+           dry_run,
            include_stopped,
            warning_callback,
            stop_instance_callback):
@@ -237,6 +246,7 @@ def reaper(min_cpu_utilisation,
     if nexttoken is None:
       done = True
 
+  # keep only those instances whose type that match INSTANCE_TYPE_REGEX
   if verbose:
     print('Instances')
     print('=========')
@@ -253,21 +263,37 @@ def reaper(min_cpu_utilisation,
   stopped = 0
   checked = 0
   for inst in instances_vec:
-    if inst.is_running or include_stopped:
-      checked += 1
-      if inst.idle_period_hours < stop_instance_idle_timeout_hours:
-        if inst.idle_period_hours >= warning_idle_timeout_hours:
+    if not inst.is_running and not include_stopped:
+      print(f"{inst.name:64s}  not checked: not running")
+      continue
+
+    if INSTANCE_TYPE_REGEX.search(inst.InstanceType) is None:
+      print(f"{inst.name:64s}  not checked: instance type ({inst.InstanceType}) doesn't match")
+      continue
+
+    checked += 1
+    if inst.idle_period_hours < stop_instance_idle_timeout_hours:
+      if inst.idle_period_hours >= warning_idle_timeout_hours:
+        if dry_run:
+          print('  Would have issued warning')
+        else:
           warning_callback(inst)
           warned += 1
+    else:
+      if dry_run:
+        print('  Would have stopped instance')
       else:
         stop_instance_callback(inst)
         stopped += 1
 
-      if verbose:
-        print(f'{inst.name} cpu_idle={inst.cpu_idle_period_hours} '
-              f'net_idle={inst.network_idle_period_hours}',
-              f'disk_idle={inst.disk_idle_period_hours}')
+    if verbose:
+      print(f'{inst.name} cpu_idle={inst.cpu_idle_period_hours:.2f} '
+            f'net_idle={inst.network_idle_period_hours:.2f}',
+            f'disk_idle={inst.disk_idle_period_hours:.2f}')
 
+  print('')
+  print('Summary')
+  print('=======')
   print(f'Checked {checked} instances, issued {warned} warnings and stopped {stopped}.')
 
 if __name__ == '__main__':
