@@ -65,7 +65,7 @@ class Instance(dict):
     for tagdict in self['Tags']:
       if tagdict['Key'] == 'Name':
         return tagdict['Value']
-    return None
+    return '<NO NAME>'
 
   @property
   def state(self):
@@ -200,6 +200,8 @@ class Instance(dict):
 @click.option('--test-slack', type=str, default=None,
               help='When given a test message is sent into slack. Intended for '
                    'verifying slack integration. No other action will be taken')
+@click.option('-r', '--region', type=str, default=None,
+              help='The AWS region to check')
 def main(*args, **kwargs):
   if kwargs['test_slack']:
     slack_send(kwargs['test_slack'])
@@ -221,7 +223,8 @@ def reaper(min_cpu_utilisation,
            dry_run,
            include_stopped,
            warning_callback,
-           stop_instance_callback):
+           stop_instance_callback,
+           region):
 
   if stop_instance_idle_timeout_hours > REPORTING_LOOKBACK_TIME_HOURS:
     raise Exception(f'stop_instance idle timeout ({stop_instance_idle_timeout_hours}) cannot be longer than '
@@ -230,7 +233,7 @@ def reaper(min_cpu_utilisation,
   if warning_idle_timeout_hours > REPORTING_LOOKBACK_TIME_HOURS:
     raise Exception(f'warning idle timeout ({warning_idle_timeout_hours}) cannot be longer than '
                     f'{REPORTING_LOOKBACK_TIME_HOURS} hours.')
-  ec2 = boto3.client('ec2')
+  ec2 = boto3.client('ec2', region_name=region)
 
   instances_vec = []
   done = False
