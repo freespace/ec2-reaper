@@ -9,14 +9,16 @@ import click
 import boto3
 import requests
 
+from ebs import ebs_reaper
+
 # the small unit of time over which we report on
 # statistics. i.e. when we ask for an average of a value
 # it is average over REPORTING_PERIOD_SECS
-REPORTING_PERIOD_SECS = 5*60
+REPORTING_PERIOD_SECS = 10*60
 
 # this the number of hours we look back when computing
 # utilisation
-REPORTING_LOOKBACK_TIME_HOURS = 48
+REPORTING_LOOKBACK_TIME_HOURS = 72
 
 SLACK_WEB_HOOK_ENV_VAR = 'SLACK_WEB_HOOK'
 SLACK_CHANNEL_ENV_VAR = 'SLACK_CHANNEL'
@@ -212,7 +214,14 @@ def main(*args, **kwargs):
   kwargs['stop_instance_callback'] = stop_instance
   kwargs['warning_callback'] = slack_warn
 
+  print('EC2 Reaper')
+  print('==========')
   reaper(*args, **kwargs)
+  print('')
+
+  print('EBS Reaper')
+  print('==========')
+  ebs_reaper(slack_send_func=slack_send)
 
 def reaper(min_cpu_utilisation,
            min_disk_ops,
