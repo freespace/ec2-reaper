@@ -1,0 +1,18 @@
+repos:
+  - repo: https://github.com/pre-commit/mirrors-isort
+    rev: v4.3.21
+    hooks:
+    - id: isort
+      additional_dependencies: [toml]
+  - repo: https://github.com/myint/docformatter
+    rev: v1.3.1
+    hooks:
+      - id: docformatter
+        args: ['--in-place', '--pre-summary-newline', '--make-summary-multi-line']
+  - repo: https://gitlab.com/pycqa/flake8
+    rev: 3.8.2
+    hooks:
+      - id: flake8
+        args: ['--select=F']
+        language_version: python3
+        exclude: migrations
